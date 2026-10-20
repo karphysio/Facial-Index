@@ -3,368 +3,250 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Facial Muscle Activity & Symmetry Evaluator</title>
-    <!-- Tailwind CSS CDN -->
+    <title>FaceTrack - Clinical Bell's Palsy Facial Symmetry Evaluator</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        teal: {
-                            50: '#f0fdfa',
-                            100: '#ccfbf1',
-                            500: '#14b8a6',
-                            600: '#0d9488',
-                            700: '#0f766e',
-                            800: '#115e59',
-                            900: '#134e4a',
-                        },
-                        slate: {
-                            850: '#1e293b',
-                            900: '#0f172a',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- FontAwesome & Lucide Icons -->
+    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Chart.js for radar & visual metrics -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- html2canvas and jsPDF for Clinical PDF Report Export -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- MediaPipe Vision Tasks -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.js" crossorigin="anonymous"></script>
+    <!-- jsPDF for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- MediaPipe Face Mesh & Camera Utils -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
-
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
+            background-color: #0b0f17;
+            color: #e2e8f0;
         }
-        /* Custom scrollbars */
+        /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
         }
         ::-webkit-scrollbar-track {
-            background: #1e293b;
+            background: #111827;
         }
         ::-webkit-scrollbar-thumb {
-            background: #0d9488;
+            background: #374151;
             border-radius: 3px;
         }
-        /* Glassmorphism elements */
-        .glass-card {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4b5563;
         }
-        .pulse-teal {
-            box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7);
-            animation: pulse-animation 2s infinite;
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            padding-top: 75%; /* 4:3 Aspect Ratio */
+            background-color: #030712;
+            border-radius: 0.75rem;
+            overflow: hidden;
         }
-        @keyframes pulse-animation {
-            0% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(20, 184, 166, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0); }
+        .canvas-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .pulse-border {
+            box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(20, 184, 166, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(20, 184, 166, 0);
+            }
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col bg-slate-900 text-slate-100">
+<body class="min-h-screen flex flex-col justify-between p-3 md:p-6">
 
-    <!-- Header Navigation -->
-    <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-50 backdrop-blur-md">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-400 font-bold text-xl">
-                    <i class="fa-solid fa-face-smile"></i>
-                </div>
-                <div>
-                    <h1 class="font-bold text-lg leading-tight tracking-wide text-white">FaceQuant <span class="text-teal-400 font-light text-sm">Clinical AI</span></h1>
-                    <p class="text-xs text-slate-400">Bell's Palsy & Facial Nerve Symmetry Grading System</p>
-                </div>
+    <!-- Navigation Header -->
+    <header class="max-w-7xl w-full mx-auto flex flex-col sm:flex-row justify-between items-center pb-4 border-b border-slate-800 gap-3">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-400 font-bold text-xl">
+                <i class="fa-solid fa-face-smile"></i>
             </div>
-            
-            <div class="flex items-center gap-3">
-                <span id="camera-status-badge" class="px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Initializing Camera
-                </span>
-                <button id="toggle-demo-btn" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700 flex items-center gap-1.5">
-                    <i class="fa-solid fa-sliders text-teal-400"></i> Simulation Mode
-                </button>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-wide text-white">FaceTrack <span class="text-teal-400 font-light text-sm">Clinical AI</span></h1>
+                <p class="text-xs text-slate-400">Bell's Palsy & Facial Nerve Symmetry Grading System</p>
             </div>
+        </div>
+
+        <div class="flex items-center gap-2 text-xs">
+            <div id="cameraStatus" class="px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Camera Initializing
+            </div>
+            <button id="toggleMeshBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium transition flex items-center gap-1.5">
+                <i class="fa-solid fa-network-wired text-teal-400"></i> Landmarks
+            </button>
         </div>
     </header>
 
-    <!-- Main App Layout -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        <!-- Left Column: Video Feed & Task Step Guidance (7 cols) -->
-        <section class="lg:col-span-7 flex flex-col gap-6">
-
-            <!-- Video Canvas Stage Card -->
-            <div class="glass-card rounded-2xl p-4 flex flex-col gap-4 relative overflow-hidden shadow-2xl">
-                <!-- Task Progress Bar -->
-                <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
-                    <div id="protocol-progress-bar" class="bg-gradient-to-r from-teal-500 to-emerald-400 h-full w-[16.6%] transition-all duration-300"></div>
-                </div>
-
-                <!-- Guidance Banner Overlay Header -->
-                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                    <div class="flex items-center gap-2.5">
-                        <span id="step-number" class="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 border border-teal-500/30 font-bold text-sm flex items-center justify-center">1</span>
-                        <div>
-                            <h2 id="task-title" class="text-base font-semibold text-white">Baseline Assessment (At Rest)</h2>
-                            <p id="task-instruction" class="text-xs text-slate-400">Maintain a neutral, relaxed expression looking directly at the camera.</p>
-                        </div>
-                    </div>
-                    <button id="capture-step-btn" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-teal-900/40 transition flex items-center gap-2 pulse-teal">
-                        <i class="fa-solid fa-camera"></i> Record & Next
-                    </button>
-                </div>
-
-                <!-- Video / Overlay Canvas Container -->
-                <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center group">
-                    <!-- Hidden real video element -->
-                    <video id="webcam-video" class="hidden" playsinline muted></video>
-                    <!-- Display Overlay Canvas -->
-                    <canvas id="output-canvas" class="w-full h-full object-cover transform -scale-x-100"></canvas>
-
-                    <!-- Real-time HUD Elements -->
-                    <div class="absolute top-3 left-3 bg-slate-900/80 backdrop-blur border border-slate-700/60 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Landmark Tracking: <span id="tracking-fps" class="text-teal-400 font-mono">30 FPS</span>
+    <!-- Main Content Container -->
+    <main class="max-w-7xl w-full mx-auto my-4 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+        
+        <!-- Left Panel: Live Stream & Step Guided Workflow -->
+        <section class="lg:col-span-7 flex flex-col gap-4">
+            
+            <!-- Video & Canvas Render Viewport -->
+            <div class="bg-slate-900/80 rounded-2xl p-3 border border-slate-800 shadow-xl flex flex-col">
+                <div class="canvas-container">
+                    <video id="webcam" class="canvas-content hidden" playsinline></video>
+                    <canvas id="outputCanvas" class="canvas-content"></canvas>
+                    
+                    <!-- Guide Overlay -->
+                    <div id="guideOverlay" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
+                        <div class="w-48 h-64 border-2 border-dashed border-teal-400 rounded-full"></div>
                     </div>
 
-                    <div class="absolute top-3 right-3 flex gap-2">
-                        <button id="toggle-mesh-btn" class="bg-slate-900/80 hover:bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition">
-                            <i class="fa-solid fa-eye text-teal-400"></i> Landmarks: ON
+                    <!-- Mode Indicator Badge -->
+                    <div class="absolute top-3 left-3 bg-slate-950/80 backdrop-blur border border-slate-800 px-3 py-1 rounded-lg text-xs font-mono text-teal-400 flex items-center gap-2">
+                        <span id="fpsCounter">0 FPS</span>
+                        <span>|</span>
+                        <span id="currentStepBadge">Step 1: Neutral Rest</span>
+                    </div>
+                </div>
+
+                <!-- Step Instructions & Capture Controls -->
+                <div class="mt-4 p-4 bg-slate-950/60 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div class="flex flex-col gap-0.5">
+                        <span id="stepTitle" class="text-sm font-semibold text-teal-400">Step 1 of 4: Neutral Rest</span>
+                        <p id="stepDesc" class="text-xs text-slate-300">Keep face fully relaxed with no facial muscle expression.</p>
+                    </div>
+
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <button id="captureStepBtn" class="flex-1 sm:flex-initial px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-camera"></i> Capture Pose
                         </button>
-                        <button id="toggle-palsy-side-btn" class="bg-slate-900/80 hover:bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition">
-                            Affected Side: <span id="palsy-side-text" class="text-amber-400 font-bold">Right</span>
+                        <button id="resetWorkflowBtn" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl border border-slate-700 transition">
+                            <i class="fa-solid fa-rotate-left"></i>
                         </button>
                     </div>
-
-                    <!-- Guidance Box Overlay Frame -->
-                    <div class="absolute inset-0 border-2 border-dashed border-teal-500/20 rounded-xl pointer-events-none flex items-center justify-center">
-                        <div class="w-48 h-64 border border-teal-400/30 rounded-full flex flex-col items-center justify-between py-4 text-teal-400/30 text-[10px] uppercase font-mono tracking-widest">
-                            <span>Align Forehead</span>
-                            <span>Center Nose</span>
-                            <span>Align Chin</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step Navigator Selector Buttons -->
-                <div class="grid grid-cols-6 gap-2">
-                    <button data-step="0" class="step-nav-btn active px-2 py-2 rounded-lg text-xs font-medium bg-teal-500/20 text-teal-300 border border-teal-500/50 flex flex-col items-center gap-1 transition">
-                        <i class="fa-solid fa-face-meh"></i>
-                        <span class="text-[10px] truncate w-full text-center">1. Rest</span>
-                    </button>
-                    <button data-step="1" class="step-nav-btn px-2 py-2 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 flex flex-col items-center gap-1 transition hover:bg-slate-750">
-                        <i class="fa-solid fa-face-surprise"></i>
-                        <span class="text-[10px] truncate w-full text-center">2. Eyebrows</span>
-                    </button>
-                    <button data-step="2" class="step-nav-btn px-2 py-2 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 flex flex-col items-center gap-1 transition hover:bg-slate-750">
-                        <i class="fa-solid fa-eye-slash"></i>
-                        <span class="text-[10px] truncate w-full text-center">3. Close Eyes</span>
-                    </button>
-                    <button data-step="3" class="step-nav-btn px-2 py-2 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 flex flex-col items-center gap-1 transition hover:bg-slate-750">
-                        <i class="fa-solid fa-face-smile-beam"></i>
-                        <span class="text-[10px] truncate w-full text-center">4. Smile</span>
-                    </button>
-                    <button data-step="4" class="step-nav-btn px-2 py-2 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 flex flex-col items-center gap-1 transition hover:bg-slate-750">
-                        <i class="fa-solid fa-face-grimace"></i>
-                        <span class="text-[10px] truncate w-full text-center">5. Snarl</span>
-                    </button>
-                    <button data-step="5" class="step-nav-btn px-2 py-2 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 flex flex-col items-center gap-1 transition hover:bg-slate-750">
-                        <i class="fa-solid fa-face-kiss-puff"></i>
-                        <span class="text-[10px] truncate w-full text-center">6. Puff Cheeks</span>
-                    </button>
                 </div>
             </div>
 
-            <!-- Real-time Quantitative Muscle Activation Meters -->
-            <div class="glass-card rounded-2xl p-5 flex flex-col gap-4">
-                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <h3 class="text-sm font-semibold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-chart-simple text-teal-400"></i> Real-time Muscle Activation Disparity
-                    </h3>
-                    <span class="text-[11px] text-slate-400 font-mono">Normal Variance: &lt;10%</span>
+            <!-- Side Selection & Controls -->
+            <div class="bg-slate-900/60 rounded-2xl p-4 border border-slate-800/80 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-medium text-slate-400">Affected Side:</span>
+                    <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                        <button id="palsyLeftBtn" onclick="setPalsySide('left')" class="px-3 py-1 rounded-lg bg-teal-500/20 text-teal-400 font-semibold border border-teal-500/40">Left Side</button>
+                        <button id="palsyRightBtn" onclick="setPalsySide('right')" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white">Right Side</button>
+                    </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <!-- Metric 1: Frontalis (Forehead) -->
-                    <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-                        <div class="flex justify-between text-xs mb-1.5">
-                            <span class="font-medium text-slate-300">Frontalis (Eyebrow Height)</span>
-                            <span id="metric-eyebrow-val" class="font-mono text-teal-400">Diff: 14%</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-[10px] text-slate-400">
-                            <span class="w-8">L: <span id="eyebrow-l" class="font-mono text-slate-200">22px</span></span>
-                            <div class="flex-1 bg-slate-800 h-2.5 rounded-full overflow-hidden flex">
-                                <div id="bar-eyebrow-l" class="bg-teal-500 h-full w-[50%] border-r border-slate-900"></div>
-                                <div id="bar-eyebrow-r" class="bg-amber-500 h-full w-[36%]"></div>
-                            </div>
-                            <span class="w-8 text-right">R: <span id="eyebrow-r" class="font-mono text-slate-200">14px</span></span>
-                        </div>
-                    </div>
-
-                    <!-- Metric 2: Orbicularis Oculi (Eye Closure) -->
-                    <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-                        <div class="flex justify-between text-xs mb-1.5">
-                            <span class="font-medium text-slate-300">Orbicularis Oculi (Aperture)</span>
-                            <span id="metric-eye-val" class="font-mono text-teal-400">Diff: 28%</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-[10px] text-slate-400">
-                            <span class="w-8">L: <span id="eye-l" class="font-mono text-slate-200">9px</span></span>
-                            <div class="flex-1 bg-slate-800 h-2.5 rounded-full overflow-hidden flex">
-                                <div id="bar-eye-l" class="bg-teal-500 h-full w-[65%] border-r border-slate-900"></div>
-                                <div id="bar-eye-r" class="bg-amber-500 h-full w-[37%]"></div>
-                            </div>
-                            <span class="w-8 text-right">R: <span id="eye-r" class="font-mono text-slate-200">14px</span></span>
-                        </div>
-                    </div>
-
-                    <!-- Metric 3: Zygomaticus Major (Mouth Corner Lift) -->
-                    <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-                        <div class="flex justify-between text-xs mb-1.5">
-                            <span class="font-medium text-slate-300">Zygomaticus (Smile Excursion)</span>
-                            <span id="metric-smile-val" class="font-mono text-teal-400">Diff: 32%</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-[10px] text-slate-400">
-                            <span class="w-8">L: <span id="smile-l" class="font-mono text-slate-200">35px</span></span>
-                            <div class="flex-1 bg-slate-800 h-2.5 rounded-full overflow-hidden flex">
-                                <div id="bar-smile-l" class="bg-teal-500 h-full w-[70%] border-r border-slate-900"></div>
-                                <div id="bar-smile-r" class="bg-amber-500 h-full w-[38%]"></div>
-                            </div>
-                            <span class="w-8 text-right">R: <span id="smile-r" class="font-mono text-slate-200">19px</span></span>
-                        </div>
-                    </div>
-
-                    <!-- Metric 4: Orbicularis Oris / Nasolabial (Midface Symmetry) -->
-                    <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-                        <div class="flex justify-between text-xs mb-1.5">
-                            <span class="font-medium text-slate-300">Nasolabial & Lip Symmetry</span>
-                            <span id="metric-mouth-val" class="font-mono text-teal-400">Diff: 18%</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-[10px] text-slate-400">
-                            <span class="w-8">L: <span id="mouth-l" class="font-mono text-slate-200">42px</span></span>
-                            <div class="flex-1 bg-slate-800 h-2.5 rounded-full overflow-hidden flex">
-                                <div id="bar-mouth-l" class="bg-teal-500 h-full w-[55%] border-r border-slate-900"></div>
-                                <div id="bar-mouth-r" class="bg-amber-500 h-full w-[37%]"></div>
-                            </div>
-                            <span class="w-8 text-right">R: <span id="mouth-r" class="font-mono text-slate-200">34px</span></span>
-                        </div>
-                    </div>
+                <div class="flex items-center gap-2">
+                    <button id="calcResultsBtn" onclick="calculateFinalAssessment()" disabled class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-xl shadow transition flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line"></i> Generate Assessment
+                    </button>
                 </div>
             </div>
 
         </section>
 
-        <!-- Right Column: Clinical Grading, Synkinesis, & Evaluation Summary (5 cols) -->
-        <section class="lg:col-span-5 flex flex-col gap-6">
-
-            <!-- House-Brackmann & Sunnybrook Grading Cards -->
-            <div id="clinical-summary-card" class="glass-card rounded-2xl p-5 flex flex-col gap-5 border-l-4 border-l-teal-500">
-                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                    <div>
-                        <h3 class="font-bold text-base text-white">Clinical Assessment Scores</h3>
-                        <p class="text-xs text-slate-400">Computed via facial vector displacement</p>
+        <!-- Right Panel: Quantitative Clinical Metrics & PDF Export -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- Snapshot Comparison Grid -->
+            <div class="bg-slate-900/80 rounded-2xl p-4 border border-slate-800">
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Captured Expression Poses</h3>
+                <div class="grid grid-cols-4 gap-2">
+                    <div class="flex flex-col items-center gap-1">
+                        <div id="thumb1" class="w-full aspect-square bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center text-slate-600 text-xs overflow-hidden">1</div>
+                        <span class="text-[10px] text-slate-400">Rest</span>
                     </div>
-                    <span id="hb-grade-badge" class="px-3 py-1 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        Grade III (Moderate)
-                    </span>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3 text-center">
-                    <!-- House Brackmann Box -->
-                    <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
-                        <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">House-Brackmann Scale</span>
-                        <div id="hb-score-display" class="text-3xl font-extrabold text-teal-400 my-1">III <span class="text-sm font-normal text-slate-400">/ VI</span></div>
-                        <span id="hb-desc" class="text-[11px] text-slate-300 font-medium">Noticeable asymmetry at movement</span>
+                    <div class="flex flex-col items-center gap-1">
+                        <div id="thumb2" class="w-full aspect-square bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center text-slate-600 text-xs overflow-hidden">2</div>
+                        <span class="text-[10px] text-slate-400">Smile</span>
                     </div>
-
-                    <!-- Sunnybrook System Box -->
-                    <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
-                        <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Sunnybrook Score</span>
-                        <div id="sunnybrook-score-display" class="text-3xl font-extrabold text-emerald-400 my-1">62 <span class="text-sm font-normal text-slate-400">/ 100</span></div>
-                        <span class="text-[11px] text-slate-300 font-medium">Composite Symmetry Index</span>
+                    <div class="flex flex-col items-center gap-1">
+                        <div id="thumb3" class="w-full aspect-square bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center text-slate-600 text-xs overflow-hidden">3</div>
+                        <span class="text-[10px] text-slate-400">Eye Squeeze</span>
                     </div>
-                </div>
-
-                <!-- Radar Chart Visualizing Muscle Domain Activation -->
-                <div class="w-full h-48 bg-slate-900/40 rounded-xl border border-slate-800/80 p-2 flex items-center justify-center">
-                    <canvas id="symmetry-radar-chart"></canvas>
-                </div>
-            </div>
-
-            <!-- Synkinesis Detection & Involuntary Movement Alert -->
-            <div class="glass-card rounded-2xl p-5 flex flex-col gap-3">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-sm font-semibold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Synkinesis & Involuntary Coupling
-                    </h3>
-                    <span id="synkinesis-risk-tag" class="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        Mild Detected
-                    </span>
-                </div>
-                <p class="text-xs text-slate-400 leading-relaxed">
-                    Evaluates unintentional co-contractions during primary facial expressions (e.g., ocular narrowing when smiling).
-                </p>
-
-                <div class="space-y-2 mt-1">
-                    <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between text-xs">
-                        <span class="text-slate-300">Ocular-Oral Coupling (Eye narrow on smile)</span>
-                        <span id="synkinesis-eye-smile" class="font-mono text-amber-400 font-semibold">18% (Mild)</span>
-                    </div>
-                    <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between text-xs">
-                        <span class="text-slate-300">Oral-Ocular Coupling (Mouth twitch on blink)</span>
-                        <span id="synkinesis-mouth-blink" class="font-mono text-emerald-400 font-semibold">4% (Normal)</span>
+                    <div class="flex flex-col items-center gap-1">
+                        <div id="thumb4" class="w-full aspect-square bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center text-slate-600 text-xs overflow-hidden">4</div>
+                        <span class="text-[10px] text-slate-400">Brow Raise</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Snapshot Baseline vs Activation Comparison Preview -->
-            <div class="glass-card rounded-2xl p-5 flex flex-col gap-3">
-                <h3 class="text-sm font-semibold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-images text-teal-400"></i> Task Snapshots (Rest vs Active)
-                </h3>
-                
+            <!-- Clinical Assessment Card -->
+            <div class="bg-slate-900/80 rounded-2xl p-5 border border-slate-800 flex flex-col gap-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <h2 class="text-sm font-bold text-white uppercase tracking-wider">Clinical Grading Summary</h2>
+                    <span id="assessmentStatus" class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono">Pending Capture</span>
+                </div>
+
+                <!-- House-Brackmann & Sunnybrook Scores -->
                 <div class="grid grid-cols-2 gap-3">
-                    <div class="bg-slate-950 rounded-lg p-2 border border-slate-800 flex flex-col items-center">
-                        <span class="text-[10px] text-slate-400 font-mono mb-1">Step 1: Baseline (Rest)</span>
-                        <div class="w-full aspect-video bg-slate-900 rounded overflow-hidden flex items-center justify-center relative">
-                            <img id="snapshot-rest" class="w-full h-full object-cover hidden" alt="Rest Frame">
-                            <span id="snapshot-rest-placeholder" class="text-[11px] text-slate-600 italic">No capture</span>
+                    <div class="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[11px] text-slate-400 block">House-Brackmann Scale</span>
+                        <span id="hbGrade" class="text-2xl font-bold text-teal-400 mt-1 block">--</span>
+                        <span id="hbDesc" class="text-[10px] text-slate-500 mt-0.5 block">Estimated Grade</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[11px] text-slate-400 block">Sunnybrook Composite</span>
+                        <span id="sbScore" class="text-2xl font-bold text-indigo-400 mt-1 block">-- / 100</span>
+                        <span id="sbDesc" class="text-[10px] text-slate-500 mt-0.5 block">0 (Total) to 100 (Normal)</span>
+                    </div>
+                </div>
+
+                <!-- Detailed Asymmetry Breakdown -->
+                <div class="space-y-3 mt-1">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Resting Symmetry Gap</span>
+                            <span id="restGapVal" class="text-slate-200 font-mono">--%</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden">
+                            <div id="restGapBar" class="h-full bg-teal-500 w-0 transition-all duration-500"></div>
                         </div>
                     </div>
-                    <div class="bg-slate-950 rounded-lg p-2 border border-slate-800 flex flex-col items-center">
-                        <span class="text-[10px] text-slate-400 font-mono mb-1">Step 4: Active (Smile)</span>
-                        <div class="w-full aspect-video bg-slate-900 rounded overflow-hidden flex items-center justify-center relative">
-                            <img id="snapshot-smile" class="w-full h-full object-cover hidden" alt="Smile Frame">
-                            <span id="snapshot-smile-placeholder" class="text-[11px] text-slate-600 italic">No capture</span>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Voluntary Smile Excursion</span>
+                            <span id="smileExcursionVal" class="text-slate-200 font-mono">--%</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden">
+                            <div id="smileExcursionBar" class="h-full bg-indigo-500 w-0 transition-all duration-500"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Eye Closure Completeness</span>
+                            <span id="eyeClosureVal" class="text-slate-200 font-mono">--%</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden">
+                            <div id="eyeClosureBar" class="h-full bg-blue-500 w-0 transition-all duration-500"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Export & Clinical Download Action -->
-                <div class="pt-2 border-t border-slate-800 flex flex-wrap sm:flex-nowrap gap-2">
-                    <button id="download-pdf-report-btn" class="flex-1 py-2.5 px-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-teal-900/40 transition flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-file-pdf text-sm"></i> Export PDF Report
-                    </button>
-                    <button id="download-report-btn" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-teal-400 border border-teal-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
-                        <i class="fa-solid fa-code"></i> JSON
-                    </button>
-                    <button id="reset-protocol-btn" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl text-xs font-semibold transition">
-                        <i class="fa-solid fa-rotate-right"></i>
-                    </button>
+                <!-- Synkinesis Detection Alert -->
+                <div id="synkinesisAlert" class="bg-slate-950/90 rounded-xl p-3 border border-slate-800 text-xs flex items-start gap-2.5">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5"></i>
+                    <div>
+                        <span class="font-semibold text-slate-200 block">Synkinesis Tracking</span>
+                        <span id="synkinesisText" class="text-[11px] text-slate-400">Complete all 4 poses to evaluate involuntary muscle mass movements.</span>
+                    </div>
                 </div>
+
+                <!-- Export PDF Action Button -->
+                <button id="exportPdfBtn" onclick="exportPrinterFriendlyPDF()" disabled class="w-full py-3 bg-teal-500 hover:bg-teal-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2 mt-2">
+                    <i class="fa-solid fa-file-pdf text-sm"></i> Export Printer-Friendly PDF Report
+                </button>
             </div>
 
             <!-- Non-Diagnostic Clinical Disclaimer -->
@@ -381,680 +263,445 @@
 
     <!-- Application Script -->
     <script>
-        // State Management
+        // Global State & Configuration
+        const { FaceLandmarker, FilesetResolver } = vision;
+
+        let faceLandmarker = null;
+        let webcam = null;
+        let canvasElement = null;
+        let canvasCtx = null;
+        let showLandmarks = true;
+        let lastVideoTime = -1;
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+
         const state = {
-            currentStep: 0,
-            palsySide: 'right', // 'left' or 'right'
-            showLandmarks: true,
-            isSimulationMode: false,
-            webcamActive: false,
-            capturedSnapshots: {},
-            fps: 30,
-            
-            // Standard task definitions
-            tasks: [
-                { id: 'rest', title: 'Baseline Assessment (At Rest)', instruction: 'Maintain a relaxed, neutral facial expression looking straight ahead.' },
-                { id: 'eyebrows', title: 'Raise Eyebrows (Frontalis)', instruction: 'Raise both eyebrows as high as possible to form forehead wrinkles.' },
-                { id: 'close_eyes', title: 'Close Eyes Tightly (Orbicularis Oculi)', instruction: 'Squeeze both eyes shut as tightly as possible.' },
-                { id: 'smile', title: 'Smile Broadly (Zygomaticus Major)', instruction: 'Smile wide showing teeth, pulling mouth corners upward.' },
-                { id: 'snarl', title: 'Snarl / Pucker (Levator Labii / Oris)', instruction: 'Wrinkle nose and elevate upper lip in a snarl.' },
-                { id: 'puff_cheeks', title: 'Puff Cheeks (Buccinator)', instruction: 'Fill cheeks with air and hold tight lip seal.' }
-            ],
-
-            // Real-time calculated metrics (Pixel distances or normalized indices)
-            metrics: {
-                eyebrowHeightL: 22, eyebrowHeightR: 14,
-                eyeApertureL: 10, eyeApertureR: 14,
-                smileExcursionL: 35, smileExcursionR: 19,
-                nasolabialL: 42, nasolabialR: 34,
-                synkinesisEyeSmile: 18,
-                synkinesisMouthBlink: 4
-            }
+            palsySide: 'left', // 'left' or 'right'
+            currentStep: 1, // 1: Rest, 2: Smile, 3: Eye Squeeze, 4: Brow Raise
+            stepData: {
+                1: null,
+                2: null,
+                3: null,
+                4: null
+            },
+            stepSnapshots: {
+                1: null,
+                2: null,
+                3: null,
+                4: null
+            },
+            calculatedResults: null
         };
 
-        // MediaPipe & Canvas Elements
-        let videoElement, canvasElement, canvasCtx, faceMesh, camera;
-        let radarChart;
-
-        // DOM Initialization
-        window.onload = async function() {
-            initElements();
-            initRadarChart();
-            setupEventListeners();
-            initMediaPipe();
+        // Key MediaPipe Facial Landmarks Indices
+        const LANDMARKS = {
+            NOSE_TIP: 1,
+            CHIN: 152,
+            LEFT_EYE_TOP: 159,
+            LEFT_EYE_BOTTOM: 145,
+            RIGHT_EYE_TOP: 386,
+            RIGHT_EYE_BOTTOM: 374,
+            LEFT_LIP_CORNER: 61,
+            RIGHT_LIP_CORNER: 291,
+            LEFT_BROW_INNER: 70,
+            RIGHT_BROW_INNER: 300,
+            LEFT_BROW_MID: 105,
+            RIGHT_BROW_MID: 334
         };
 
-        function initElements() {
-            videoElement = document.getElementById('webcam-video');
-            canvasElement = document.getElementById('output-canvas');
+        window.addEventListener('DOMContentLoaded', async () => {
+            webcam = document.getElementById('webcam');
+            canvasElement = document.getElementById('outputCanvas');
             canvasCtx = canvasElement.getContext('2d');
 
-            // Responsive Canvas Sizing
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
-        }
+            setupUIEventListeners();
+            await initializeMediaPipe();
+            await startWebcam();
+        });
 
-        function resizeCanvas() {
-            if (canvasElement && canvasElement.parentElement) {
-                canvasElement.width = canvasElement.parentElement.clientWidth;
-                canvasElement.height = canvasElement.parentElement.clientHeight;
-            }
-        }
-
-        // Radar Chart for Symmetry Profile
-        function initRadarChart() {
-            const ctx = document.getElementById('symmetry-radar-chart').getContext('2d');
-            radarChart = new Chart(ctx, {
-                type: 'radar',
-                data: {
-                    labels: ['Forehead (Frontalis)', 'Eye Closure', 'Smile Elevation', 'Lip Seal', 'Midface Tone'],
-                    datasets: [
-                        {
-                            label: 'Left Side (%)',
-                            data: [90, 95, 88, 92, 90],
-                            fill: true,
-                            backgroundColor: 'rgba(20, 184, 166, 0.2)',
-                            borderColor: '#14b8a6',
-                            pointBackgroundColor: '#14b8a6',
-                            borderWidth: 2
-                        },
-                        {
-                            label: 'Right Side (Affected)',
-                            data: [55, 60, 48, 70, 62],
-                            fill: true,
-                            backgroundColor: 'rgba(245, 158, 11, 0.2)',
-                            borderColor: '#f59e0b',
-                            pointBackgroundColor: '#f59e0b',
-                            borderWidth: 2
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        r: {
-                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            pointLabels: { color: '#94a3b8', font: { size: 10 } },
-                            ticks: { display: false, max: 100, min: 0 }
-                        }
+        // Initialize MediaPipe FaceLandmarker
+        async function initializeMediaPipe() {
+            try {
+                const filesetResolver = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+                );
+                faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+                    baseOptions: {
+                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                        delegate: "GPU"
                     },
-                    plugins: {
-                        legend: {
-                            labels: { color: '#cbd5e1', font: { size: 10 } }
-                        }
-                    }
-                }
-            });
-        }
+                    outputFaceBlendshapes: true,
+                    runningMode: "VIDEO",
+                    numFaces: 1
+                });
 
-        // MediaPipe Face Mesh Setup
-        function initMediaPipe() {
-            faceMesh = new FaceMesh({
-                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-            });
-
-            faceMesh.setOptions({
-                maxNumFaces: 1,
-                refineLandmarks: true,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-
-            faceMesh.onResults(onFaceMeshResults);
-
-            // Initialize Camera Utility
-            camera = new Camera(videoElement, {
-                onFrame: async () => {
-                    if (!state.isSimulationMode) {
-                        await faceMesh.send({ image: videoElement });
-                    }
-                },
-                width: 640,
-                height: 480
-            });
-
-            camera.start().then(() => {
-                state.webcamActive = true;
-                updateCameraBadge(true);
-            }).catch(err => {
-                console.warn('Webcam failed or denied. Falling back to Simulation Mode.', err);
-                enableSimulationMode();
-            });
-        }
-
-        function updateCameraBadge(active) {
-            const badge = document.getElementById('camera-status-badge');
-            if (active) {
-                badge.className = 'px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5';
-                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Webcam Active`;
-            } else {
-                badge.className = 'px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5';
-                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span> Demo / Simulation Mode`;
+                document.getElementById('cameraStatus').innerHTML = 
+                    `<span class="w-2 h-2 rounded-full bg-teal-400"></span> Camera Ready`;
+            } catch (err) {
+                console.error("MediaPipe Init Error:", err);
+                document.getElementById('cameraStatus').innerHTML = 
+                    `<span class="w-2 h-2 rounded-full bg-red-500"></span> Init Failed`;
             }
         }
 
-        // Process Face Mesh Results
-        function onFaceMeshResults(results) {
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        // Setup Webcam Stream
+        async function startWebcam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: "user" }
+                });
+                webcam.srcObject = stream;
+                webcam.addEventListener("loadeddata", renderLoop);
+            } catch (err) {
+                console.error("Webcam Access Error:", err);
+                alert("Camera permission is required for real-time facial feature evaluation.");
+            }
+        }
 
-            // Draw Source Image Frame
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-                const landmarks = results.multiFaceLandmarks[0];
-
-                // Perform Quantitative Metric Calculations
-                calculateLandmarkMetrics(landmarks, canvasElement.width, canvasElement.height);
-
-                // Render Visual Facial Mesh Grid & Key Vectors
-                if (state.showLandmarks) {
-                    drawFacialKeypoints(landmarks, canvasCtx, canvasElement.width, canvasElement.height);
-                }
+        // Main Video Processing Loop
+        async function renderLoop() {
+            // Resize canvas dynamically to fit display container
+            if (canvasElement.width !== webcam.videoWidth) {
+                canvasElement.width = webcam.videoWidth;
+                canvasElement.height = webcam.videoHeight;
             }
 
-            canvasCtx.restore();
+            // Calculate FPS
+            const now = performance.now();
+            frameCount++;
+            if (now - lastFrameTime >= 1000) {
+                document.getElementById('fpsCounter').innerText = `${frameCount} FPS`;
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+
+            // Process face landmarks
+            if (faceLandmarker && webcam.currentTime !== lastVideoTime) {
+                lastVideoTime = webcam.currentTime;
+                const startTimeMs = performance.now();
+                const results = faceLandmarker.detectForVideo(webcam, startTimeMs);
+
+                canvasCtx.save();
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                
+                // Draw mirrored camera frame
+                canvasCtx.translate(canvasElement.width, 0);
+                canvasCtx.scale(-1, 1);
+                canvasCtx.drawImage(webcam, 0, 0, canvasElement.width, canvasElement.height);
+
+                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+                    const landmarks = results.faceLandmarks[0];
+                    if (showLandmarks) {
+                        drawFaceMesh(landmarks);
+                    }
+                    // Cache current frame landmarks
+                    window.currentLandmarks = landmarks;
+                }
+
+                canvasCtx.restore();
+            }
+
+            requestAnimationFrame(renderLoop);
         }
 
-        // Calculation of Clinical Asymmetry Indices
-        function calculateLandmarkMetrics(landmarks, width, height) {
-            // Helper function to get absolute pixel coords
-            const getPt = (idx) => ({
-                x: landmarks[idx].x * width,
-                y: landmarks[idx].y * height
-            });
+        // Draw MediaPipe Landmark Points & Key Symmetry Vectors
+        function drawFaceMesh(landmarks) {
+            const w = canvasElement.width;
+            const h = canvasElement.height;
 
-            // Specific MediaPipe Keypoint Index Anchors
-            // Forehead / Eyebrows: Top Eyebrow Left (70), Right (300). Pupil Center Left (468), Right (473)
-            const eyebrowL = getPt(70), pupilL = getPt(468);
-            const eyebrowR = getPt(300), pupilR = getPt(473);
+            // Render key landmark points
+            canvasCtx.fillStyle = "rgba(20, 184, 166, 0.7)";
+            for (let i = 0; i < landmarks.length; i += 4) { // Draw subset for performance
+                const pt = landmarks[i];
+                canvasCtx.beginPath();
+                canvasCtx.arc(pt.x * w, pt.y * h, 1.2, 0, 2 * Math.PI);
+                canvasCtx.fill();
+            }
 
-            // Eye Aperture / Palpebral Fissure: Top Lid (159/386), Bottom Lid (145/374)
-            const eyeTopL = getPt(159), eyeBotL = getPt(145);
-            const eyeTopR = getPt(386), eyeBotR = getPt(374);
-
-            // Smile Corner Elevation: Mouth Corner Left (61), Right (291), Nose Tip (1)
-            const mouthCornerL = getPt(61), mouthCornerR = getPt(291), noseTip = getPt(1);
-
-            // Compute Euclidian Distances
-            const eyebrowDistL = Math.hypot(eyebrowL.x - pupilL.x, eyebrowL.y - pupilL.y);
-            const eyebrowDistR = Math.hypot(eyebrowR.x - pupilR.x, eyebrowR.y - pupilR.y);
-
-            const eyeApertureL = Math.hypot(eyeTopL.x - eyeBotL.x, eyeTopL.y - eyeBotL.y);
-            const eyeApertureR = Math.hypot(eyeTopR.x - eyeBotR.x, eyeTopR.y - eyeBotR.y);
-
-            const smileL = Math.hypot(mouthCornerL.x - noseTip.x, mouthCornerL.y - noseTip.y);
-            const smileR = Math.hypot(mouthCornerR.x - noseTip.x, mouthCornerR.y - noseTip.y);
-
-            // Update state metrics with smoothing
-            state.metrics.eyebrowHeightL = Math.round(eyebrowDistL);
-            state.metrics.eyebrowHeightR = Math.round(eyebrowDistR);
-            state.metrics.eyeApertureL = Math.round(eyeApertureL);
-            state.metrics.eyeApertureR = Math.round(eyeApertureR);
-            state.metrics.smileExcursionL = Math.round(smileL);
-            state.metrics.smileExcursionR = Math.round(smileR);
-
-            updateUI();
-        }
-
-        // Draw Clinical Overlay Vector Lines
-        function drawFacialKeypoints(landmarks, ctx, width, height) {
-            ctx.fillStyle = '#14b8a6';
-            ctx.strokeStyle = '#0d9488';
-            ctx.lineWidth = 1;
-
-            // Highlight Key Anatomical Clusters: Eyebrows, Eyes, Mouth, Midface
-            const keyIndices = [
-                // Eyebrows
-                70, 63, 105, 66, 107, 336, 296, 334, 293, 300,
-                // Eye Contours
-                33, 160, 158, 133, 153, 144, 362, 385, 387, 263, 373, 380,
-                // Mouth & Smile Line
-                61, 185, 40, 39, 37, 0, 267, 269, 270, 291, 321, 314, 17, 84, 91
+            // Highlight primary symmetry landmarks in bright teal
+            const keyPoints = [
+                LANDMARKS.LEFT_EYE_TOP, LANDMARKS.RIGHT_EYE_TOP,
+                LANDMARKS.LEFT_LIP_CORNER, LANDMARKS.RIGHT_LIP_CORNER,
+                LANDMARKS.LEFT_BROW_MID, LANDMARKS.RIGHT_BROW_MID
             ];
 
-            keyIndices.forEach(idx => {
-                if (landmarks[idx]) {
-                    const pt = landmarks[idx];
-                    ctx.beginPath();
-                    ctx.arc(pt.x * width, pt.y * height, 2, 0, 2 * Math.PI);
-                    ctx.fillStyle = idx > 200 ? '#f59e0b' : '#14b8a6'; // Differentiate left vs right side
-                    ctx.fill();
-                }
+            canvasCtx.fillStyle = "#38bdf8";
+            keyPoints.forEach(idx => {
+                const pt = landmarks[idx];
+                canvasCtx.beginPath();
+                canvasCtx.arc(pt.x * w, pt.y * h, 3.5, 0, 2 * Math.PI);
+                canvasCtx.fill();
+            });
+        }
+
+        function setupUIEventListeners() {
+            document.getElementById('toggleMeshBtn').addEventListener('click', () => {
+                showLandmarks = !showLandmarks;
             });
 
-            // Draw Midline Reference Symmetry Axis
-            const foreheadPt = landmarks[10], chinPt = landmarks[152];
-            if (foreheadPt && chinPt) {
-                ctx.beginPath();
-                ctx.moveTo(foreheadPt.x * width, foreheadPt.y * height);
-                ctx.lineTo(chinPt.x * width, chinPt.y * height);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-                ctx.setLineDash([4, 4]);
-                ctx.stroke();
-                ctx.setLineDash([]);
+            document.getElementById('captureStepBtn').addEventListener('click', captureCurrentStep);
+            document.getElementById('resetWorkflowBtn').addEventListener('click', resetWorkflow);
+        }
+
+        function setPalsySide(side) {
+            state.palsySide = side;
+            const leftBtn = document.getElementById('palsyLeftBtn');
+            const rightBtn = document.getElementById('palsyRightBtn');
+
+            if (side === 'left') {
+                leftBtn.className = "px-3 py-1 rounded-lg bg-teal-500/20 text-teal-400 font-semibold border border-teal-500/40";
+                rightBtn.className = "px-3 py-1 rounded-lg text-slate-400 hover:text-white";
+            } else {
+                rightBtn.className = "px-3 py-1 rounded-lg bg-teal-500/20 text-teal-400 font-semibold border border-teal-500/40";
+                leftBtn.className = "px-3 py-1 rounded-lg text-slate-400 hover:text-white";
             }
         }
 
-        // Fallback / Simulation Loop if Webcam is unavailable or demo requested
-        function enableSimulationMode() {
-            state.isSimulationMode = true;
-            updateCameraBadge(false);
-            runSimulationLoop();
-        }
-
-        function runSimulationLoop() {
-            if (!state.isSimulationMode) return;
-
-            // Simulate dynamic facial landmark movement for task evaluation demo
-            const time = Date.now() * 0.003;
-            const factor = Math.sin(time) * 0.5 + 0.5;
-
-            state.metrics.eyebrowHeightL = 22 + Math.round(factor * 10);
-            state.metrics.eyebrowHeightR = 14 + Math.round(factor * 3); // Impaired right side
-
-            state.metrics.eyeApertureL = 10 - Math.round(factor * 6);
-            state.metrics.eyeApertureR = 14 - Math.round(factor * 2);
-
-            state.metrics.smileExcursionL = 35 + Math.round(factor * 15);
-            state.metrics.smileExcursionR = 19 + Math.round(factor * 4);
-
-            updateUI();
-            drawSimulationCanvas();
-
-            requestAnimationFrame(runSimulationLoop);
-        }
-
-        function drawSimulationCanvas() {
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-            // Draw background placeholder face silhouette
-            canvasCtx.fillStyle = '#1e293b';
-            canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-
-            const cx = canvasElement.width / 2;
-            const cy = canvasElement.height / 2;
-
-            // Draw Head Contour
-            canvasCtx.beginPath();
-            canvasCtx.ellipse(cx, cy, 110, 150, 0, 0, 2 * Math.PI);
-            canvasCtx.strokeStyle = '#334155';
-            canvasCtx.lineWidth = 3;
-            canvasCtx.stroke();
-
-            // Draw Eyebrows (Left vs Right asymmetry)
-            canvasCtx.strokeStyle = '#14b8a6';
-            canvasCtx.beginPath();
-            canvasCtx.moveTo(cx - 70, cy - 60 - (state.metrics.eyebrowHeightL - 22));
-            canvasCtx.lineTo(cx - 20, cy - 55 - (state.metrics.eyebrowHeightL - 22));
-            canvasCtx.stroke();
-
-            canvasCtx.strokeStyle = '#f59e0b';
-            canvasCtx.beginPath();
-            canvasCtx.moveTo(cx + 20, cy - 55 - (state.metrics.eyebrowHeightR - 14));
-            canvasCtx.lineTo(cx + 70, cy - 60 - (state.metrics.eyebrowHeightR - 14));
-            canvasCtx.stroke();
-
-            // Draw Eyes
-            canvasCtx.fillStyle = '#94a3b8';
-            canvasCtx.beginPath();
-            canvasCtx.ellipse(cx - 40, cy - 30, 15, state.metrics.eyeApertureL / 2, 0, 0, 2 * Math.PI);
-            canvasCtx.ellipse(cx + 40, cy - 30, 15, state.metrics.eyeApertureR / 2, 0, 0, 2 * Math.PI);
-            canvasCtx.fill();
-
-            // Draw Mouth / Smile Curve
-            canvasCtx.beginPath();
-            canvasCtx.moveTo(cx - (state.metrics.smileExcursionL), cy + 50);
-            canvasCtx.quadraticCurveTo(cx, cy + 65, cx + (state.metrics.smileExcursionR), cy + 55);
-            canvasCtx.strokeStyle = '#f8fafc';
-            canvasCtx.lineWidth = 4;
-            canvasCtx.stroke();
-
-            // Text tag overlay
-            canvasCtx.fillStyle = '#0d9488';
-            canvasCtx.font = '12px Inter';
-            canvasCtx.fillText('SIMULATED CLINICAL PATIENT FEED', 15, 25);
-        }
-
-        // Update UI Text, Meters, and Clinical Scores
-        function updateUI() {
-            const m = state.metrics;
-
-            // Eyebrow Metric UI
-            document.getElementById('eyebrow-l').innerText = `${m.eyebrowHeightL}px`;
-            document.getElementById('eyebrow-r').innerText = `${m.eyebrowHeightR}px`;
-            const eyebrowDiff = Math.abs(m.eyebrowHeightL - m.eyebrowHeightR);
-            const eyebrowPerc = Math.round((eyebrowDiff / Math.max(m.eyebrowHeightL, 1)) * 100);
-            document.getElementById('metric-eyebrow-val').innerText = `Diff: ${eyebrowPerc}%`;
-
-            // Eye Aperture UI
-            document.getElementById('eye-l').innerText = `${m.eyeApertureL}px`;
-            document.getElementById('eye-r').innerText = `${m.eyeApertureR}px`;
-            const eyeDiff = Math.abs(m.eyeApertureL - m.eyeApertureR);
-            const eyePerc = Math.round((eyeDiff / Math.max(m.eyeApertureL, 1)) * 100);
-            document.getElementById('metric-eye-val').innerText = `Diff: ${eyePerc}%`;
-
-            // Smile UI
-            document.getElementById('smile-l').innerText = `${m.smileExcursionL}px`;
-            document.getElementById('smile-r').innerText = `${m.smileExcursionR}px`;
-            const smileDiff = Math.abs(m.smileExcursionL - m.smileExcursionR);
-            const smilePerc = Math.round((smileDiff / Math.max(m.smileExcursionL, 1)) * 100);
-            document.getElementById('metric-smile-val').innerText = `Diff: ${smilePerc}%`;
-
-            // House-Brackmann Score Calculation Logic
-            const avgAsymmetry = (eyebrowPerc + eyePerc + smilePerc) / 3;
-            let hbGrade = 'Grade I';
-            let hbText = 'Normal symmetry & function';
-            let hbBadgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-
-            if (avgAsymmetry > 45) {
-                hbGrade = 'Grade V (Severe)';
-                hbText = 'Barely perceptible movement';
-                hbBadgeClass = 'bg-red-500/20 text-red-300 border-red-500/40';
-            } else if (avgAsymmetry > 35) {
-                hbGrade = 'Grade IV (Mod. Severe)';
-                hbText = 'Obvious asymmetry, incomplete closure';
-                hbBadgeClass = 'bg-orange-500/20 text-orange-300 border-orange-500/40';
-            } else if (avgAsymmetry > 20) {
-                hbGrade = 'Grade III (Moderate)';
-                hbText = 'Noticeable asymmetry with full closure';
-                hbBadgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-            } else if (avgAsymmetry > 10) {
-                hbGrade = 'Grade II (Mild)';
-                hbText = 'Slight asymmetry on close inspection';
-                hbBadgeClass = 'bg-teal-500/20 text-teal-300 border-teal-500/40';
+        function captureCurrentStep() {
+            if (!window.currentLandmarks) {
+                alert("No face detected in camera view. Please align face inside overlay.");
+                return;
             }
 
-            document.getElementById('hb-score-display').innerHTML = `${hbGrade.split(' ')[1]} <span class="text-sm font-normal text-slate-400">/ VI</span>`;
-            document.getElementById('hb-desc').innerText = hbText;
-            document.getElementById('hb-grade-badge').className = `px-3 py-1 rounded-xl text-xs font-bold border ${hbBadgeClass}`;
-            document.getElementById('hb-grade-badge').innerText = hbGrade;
+            const step = state.currentStep;
+            state.stepData[step] = JSON.parse(JSON.stringify(window.currentLandmarks));
+            
+            // Capture canvas thumbnail
+            const thumbCanvas = document.createElement('canvas');
+            thumbCanvas.width = 120;
+            thumbCanvas.height = 120;
+            const tCtx = thumbCanvas.getContext('2d');
+            tCtx.drawImage(canvasElement, 0, 0, 120, 120);
+            state.stepSnapshots[step] = thumbCanvas.toDataURL('image/jpeg', 0.8);
 
-            // Sunnybrook Composite Estimate Calculation
-            const sunnybrookScore = Math.max(10, Math.min(100, Math.round(100 - avgAsymmetry * 1.2)));
-            document.getElementById('sunnybrook-score-display').innerHTML = `${sunnybrookScore} <span class="text-sm font-normal text-slate-400">/ 100</span>`;
+            // Update Thumbnail UI
+            const thumbBox = document.getElementById(`thumb${step}`);
+            thumbBox.innerHTML = `<img src="${state.stepSnapshots[step]}" class="w-full h-full object-cover">`;
 
-            // Update Radar Chart Dataset
-            if (radarChart) {
-                const rightScores = [
-                    Math.max(20, 100 - eyebrowPerc),
-                    Math.max(20, 100 - eyePerc),
-                    Math.max(20, 100 - smilePerc),
-                    80, 75
-                ];
-                radarChart.data.datasets[1].data = rightScores;
-                radarChart.update('none');
+            // Progress Step Workflow
+            if (step < 4) {
+                state.currentStep++;
+                updateStepUI();
+            } else {
+                document.getElementById('stepTitle').innerText = "All Poses Captured!";
+                document.getElementById('stepDesc').innerText = "Click 'Generate Assessment' below to calculate scores.";
+                document.getElementById('calcResultsBtn').disabled = false;
             }
         }
 
-        // Setup Buttons & Event Handlers
-        function setupEventListeners() {
-            // Step Task Navigator Buttons
-            document.querySelectorAll('.step-nav-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const stepIdx = parseInt(btn.getAttribute('data-step'));
-                    switchTaskStep(stepIdx);
-                });
-            });
+        function updateStepUI() {
+            const step = state.currentStep;
+            const titles = [
+                "Step 1 of 4: Neutral Rest",
+                "Step 2 of 4: Maximum Smile",
+                "Step 3 of 4: Tight Eye Squeeze",
+                "Step 4 of 4: Eyebrow Raise"
+            ];
+            const descs = [
+                "Keep face fully relaxed with no facial muscle expression.",
+                "Smile as widely as possible showing teeth.",
+                "Squeeze both eyes shut tightly.",
+                "Raise eyebrows up as high as possible."
+            ];
 
-            // Capture Step / Record Button
-            document.getElementById('capture-step-btn').addEventListener('click', captureCurrentStep);
-
-            // Toggle Palsy Side
-            document.getElementById('toggle-palsy-side-btn').addEventListener('click', () => {
-                state.palsySide = state.palsySide === 'right' ? 'left' : 'right';
-                document.getElementById('palsy-side-text').innerText = state.palsySide === 'right' ? 'Right' : 'Left';
-                document.getElementById('palsy-side-text').className = state.palsySide === 'right' ? 'text-amber-400 font-bold' : 'text-teal-400 font-bold';
-            });
-
-            // Toggle Mesh Visiblity
-            document.getElementById('toggle-mesh-btn').addEventListener('click', () => {
-                state.showLandmarks = !state.showLandmarks;
-                document.getElementById('toggle-mesh-btn').innerHTML = state.showLandmarks ? 
-                    `<i class="fa-solid fa-eye text-teal-400"></i> Landmarks: ON` : 
-                    `<i class="fa-solid fa-eye-slash text-slate-400"></i> Landmarks: OFF`;
-            });
-
-            // Toggle Simulation Mode
-            document.getElementById('toggle-demo-btn').addEventListener('click', () => {
-                state.isSimulationMode = !state.isSimulationMode;
-                if (state.isSimulationMode) {
-                    enableSimulationMode();
-                } else {
-                    state.isSimulationMode = false;
-                    updateCameraBadge(state.webcamActive);
-                }
-            });
-
-            // Export PDF Clinical Report
-            document.getElementById('download-pdf-report-btn').addEventListener('click', exportPDFReport);
-
-            // Export JSON Clinical Report
-            document.getElementById('download-report-btn').addEventListener('click', exportClinicalReport);
-
-            // Reset Protocol
-            document.getElementById('reset-protocol-btn').addEventListener('click', () => {
-                switchTaskStep(0);
-                state.capturedSnapshots = {};
-                document.getElementById('snapshot-rest').classList.add('hidden');
-                document.getElementById('snapshot-rest-placeholder').classList.remove('hidden');
-                document.getElementById('snapshot-smile').classList.add('hidden');
-                document.getElementById('snapshot-smile-placeholder').classList.remove('hidden');
-            });
+            document.getElementById('stepTitle').innerText = titles[step - 1];
+            document.getElementById('stepDesc').innerText = descs[step - 1];
+            document.getElementById('currentStepBadge').innerText = `Step ${step}: ${titles[step - 1].split(':')[1]}`;
         }
 
-        // Export PDF Clinical Assessment File using jsPDF & Canvas
-        async function exportPDFReport() {
-            const btn = document.getElementById('download-pdf-report-btn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> Generating PDF...`;
-            btn.disabled = true;
+        function resetWorkflow() {
+            state.currentStep = 1;
+            state.stepData = { 1: null, 2: null, 3: null, 4: null };
+            state.stepSnapshots = { 1: null, 2: null, 3: null, 4: null };
+            state.calculatedResults = null;
+
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`thumb${i}`).innerHTML = `${i}`;
+            }
+
+            document.getElementById('calcResultsBtn').disabled = true;
+            document.getElementById('exportPdfBtn').disabled = true;
+            document.getElementById('hbGrade').innerText = "--";
+            document.getElementById('sbScore').innerText = "-- / 100";
+            updateStepUI();
+        }
+
+        function calculateFinalAssessment() {
+            const d1 = state.stepData[1]; // Rest
+            const d2 = state.stepData[2]; // Smile
+            const d3 = state.stepData[3]; // Eye Squeeze
+            const d4 = state.stepData[4]; // Brow Raise
+
+            if (!d1 || !d2 || !d3 || !d4) return;
+
+            // Helper: 2D Distance
+            const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+
+            // 1. Resting Symmetry Gap (%)
+            const leftRestLip = dist(d1[LANDMARKS.NOSE_TIP], d1[LANDMARKS.LEFT_LIP_CORNER]);
+            const rightRestLip = dist(d1[LANDMARKS.NOSE_TIP], d1[LANDMARKS.RIGHT_LIP_CORNER]);
+            const restGap = (Math.abs(leftRestLip - rightRestLip) / Math.max(leftRestLip, rightRestLip)) * 100;
+
+            // 2. Smile Excursion Symmetry (%)
+            const leftSmileDist = dist(d2[LANDMARKS.NOSE_TIP], d2[LANDMARKS.LEFT_LIP_CORNER]) - leftRestLip;
+            const rightSmileDist = dist(d2[LANDMARKS.NOSE_TIP], d2[LANDMARKS.RIGHT_LIP_CORNER]) - rightRestLip;
+            const healthySmile = state.palsySide === 'left' ? rightSmileDist : leftSmileDist;
+            const affectedSmile = state.palsySide === 'left' ? leftSmileDist : rightSmileDist;
+            const smileExcursionRatio = Math.min(100, Math.max(0, (affectedSmile / (healthySmile || 0.001)) * 100));
+
+            // 3. Eye Closure Completeness (%)
+            const leftEyeGap = dist(d3[LANDMARKS.LEFT_EYE_TOP], d3[LANDMARKS.LEFT_EYE_BOTTOM]);
+            const rightEyeGap = dist(d3[LANDMARKS.RIGHT_EYE_TOP], d3[LANDMARKS.RIGHT_EYE_BOTTOM]);
+            const affectedEyeGap = state.palsySide === 'left' ? leftEyeGap : rightEyeGap;
+            const eyeClosureComp = Math.max(0, 100 - (affectedEyeGap * 1000));
+
+            // Sunnybrook Composite Estimate (0 - 100)
+            const sbVal = Math.round((smileExcursionRatio * 0.5) + (eyeClosureComp * 0.3) + ((100 - restGap) * 0.2));
+            
+            // House-Brackmann Grade Map
+            let hb = "Grade I (Normal)";
+            if (sbVal < 30) hb = "Grade VI (Total Paralysis)";
+            else if (sbVal < 50) hb = "Grade V (Severe)";
+            else if (sbVal < 70) hb = "Grade IV (Moderately Severe)";
+            else if (sbVal < 85) hb = "Grade III (Moderate)";
+            else if (sbVal < 96) hb = "Grade II (Mild)";
+
+            // Update UI Metrics Display
+            document.getElementById('hbGrade').innerText = hb.split(' ')[1];
+            document.getElementById('hbDesc').innerText = hb;
+            document.getElementById('sbScore').innerText = `${sbVal} / 100`;
+
+            document.getElementById('restGapVal').innerText = `${restGap.toFixed(1)}%`;
+            document.getElementById('restGapBar').style.width = `${Math.min(100, restGap * 2)}%`;
+
+            document.getElementById('smileExcursionVal').innerText = `${smileExcursionRatio.toFixed(1)}%`;
+            document.getElementById('smileExcursionBar').style.width = `${smileExcursionRatio}%`;
+
+            document.getElementById('eyeClosureVal').innerText = `${eyeClosureComp.toFixed(1)}%`;
+            document.getElementById('eyeClosureBar').style.width = `${eyeClosureComp}%`;
+
+            document.getElementById('assessmentStatus').innerText = "Complete";
+            document.getElementById('assessmentStatus').className = "text-[10px] bg-teal-500/20 text-teal-400 px-2 py-0.5 rounded-full font-mono";
+
+            // Save calculated object
+            state.calculatedResults = {
+                hbGrade: hb,
+                sbScore: sbVal,
+                restGap: restGap.toFixed(1),
+                smileExcursion: smileExcursionRatio.toFixed(1),
+                eyeClosure: eyeClosureComp.toFixed(1)
+            };
+
+            document.getElementById('exportPdfBtn').disabled = false;
+        }
+
+        function exportPrinterFriendlyPDF() {
+            if (!state.calculatedResults) return;
 
             try {
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const timestamp = new Date().toLocaleString();
 
-                // Header & Title
-                pdf.setFillColor(15, 23, 42); // slate-900
+                // Clean White Background & Black/Dark Grey Typography
+                pdf.setFillColor(255, 255, 255);
                 pdf.rect(0, 0, 210, 297, 'F');
 
-                pdf.setTextColor(20, 184, 166); // teal-500
-                pdf.setFontSize(20);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text("FaceQuant Clinical AI Assessment", 15, 20);
-
-                pdf.setTextColor(148, 163, 184); // slate-400
-                pdf.setFontSize(10);
-                pdf.setFont('helvetica', 'normal');
-                pdf.text("Bell's Palsy & Facial Nerve Symmetry Evaluation Report", 15, 26);
-                pdf.text(`Generated: ${timestamp}`, 15, 32);
-                pdf.text(`Affected Side: ${state.palsySide.toUpperCase()}`, 140, 32);
-
-                pdf.setDrawColor(30, 41, 59);
-                pdf.line(15, 36, 195, 36);
-
-                // Clinical Scores Section
-                const hbText = document.getElementById('hb-grade-badge').innerText;
-                const hbScore = document.getElementById('hb-score-display').innerText.replace(/\s+/g, ' ');
-                const sunnybrookScore = document.getElementById('sunnybrook-score-display').innerText.replace(/\s+/g, ' ');
-
-                pdf.setFillColor(30, 41, 59);
-                pdf.roundedRect(15, 42, 85, 35, 3, 3, 'F');
-                pdf.roundedRect(110, 42, 85, 35, 3, 3, 'F');
-
-                pdf.setTextColor(255, 255, 255);
-                pdf.setFontSize(11);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text("House-Brackmann Scale", 20, 50);
-                pdf.text("Sunnybrook Composite Score", 115, 50);
-
-                pdf.setTextColor(20, 184, 166);
+                // Document Header
+                pdf.setTextColor(17, 24, 39); // dark gray/black
                 pdf.setFontSize(18);
-                pdf.text(hbText, 20, 62);
-
-                pdf.setTextColor(16, 185, 129);
-                pdf.text(sunnybrookScore, 115, 62);
-
-                pdf.setFontSize(9);
-                pdf.setTextColor(148, 163, 184);
-                pdf.text(document.getElementById('hb-desc').innerText, 20, 71);
-                pdf.text("Facial Symmetry Index (0 - 100)", 115, 71);
-
-                // Quantitative Disparity Section
-                pdf.setTextColor(255, 255, 255);
-                pdf.setFontSize(12);
                 pdf.setFont('helvetica', 'bold');
-                pdf.text("Real-time Muscle Activation Disparity Metrics", 15, 88);
-
-                const m = state.metrics;
-                const metricsTable = [
-                    ["Domain / Muscle", "Left (px)", "Right (px)", "Disparity Difference (%)"],
-                    ["Frontalis (Eyebrow Height)", `${m.eyebrowHeightL}px`, `${m.eyebrowHeightR}px`, `${document.getElementById('metric-eyebrow-val').innerText}`],
-                    ["Orbicularis Oculi (Eye Aperture)", `${m.eyeApertureL}px`, `${m.eyeApertureR}px`, `${document.getElementById('metric-eye-val').innerText}`],
-                    ["Zygomaticus Major (Smile Excursion)", `${m.smileExcursionL}px`, `${m.smileExcursionR}px`, `${document.getElementById('metric-smile-val').innerText}`],
-                    ["Orbicularis Oris (Lip & Midface)", `${m.nasolabialL}px`, `${m.nasolabialR}px`, `${document.getElementById('metric-mouth-val').innerText}`]
-                ];
-
-                let startY = 94;
-                metricsTable.forEach((row, idx) => {
-                    pdf.setFillColor(idx === 0 ? 13 : 30, idx === 0 ? 148 : 41, idx === 0 ? 136 : 59);
-                    pdf.rect(15, startY, 180, 8, 'F');
-
-                    pdf.setTextColor(idx === 0 ? 255 : 226, idx === 0 ? 255 : 232, idx === 0 ? 255 : 240);
-                    pdf.setFontSize(9);
-                    pdf.setFont('helvetica', idx === 0 ? 'bold' : 'normal');
-
-                    pdf.text(row[0], 18, startY + 5.5);
-                    pdf.text(row[1], 85, startY + 5.5);
-                    pdf.text(row[2], 120, startY + 5.5);
-                    pdf.text(row[3], 155, startY + 5.5);
-
-                    startY += 9;
-                });
-
-                // Render Chart Canvas snapshot into PDF
-                const chartCanvas = document.getElementById('symmetry-radar-chart');
-                if (chartCanvas) {
-                    const chartImg = chartCanvas.toDataURL('image/png');
-                    pdf.addImage(chartImg, 'PNG', 15, startY + 5, 85, 65);
-                }
-
-                // Synkinesis Summary Box
-                pdf.setFillColor(30, 41, 59);
-                pdf.roundedRect(110, startY + 5, 85, 65, 3, 3, 'F');
-                pdf.setTextColor(255, 255, 255);
-                pdf.setFontSize(11);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text("Synkinesis & Co-contraction Analysis", 115, startY + 14);
+                pdf.text("FaceTrack Clinical AI Assessment Report", 15, 20);
 
                 pdf.setFontSize(9);
                 pdf.setFont('helvetica', 'normal');
-                pdf.setTextColor(226, 232, 240);
-                pdf.text("Ocular-Oral Coupling:", 115, startY + 26);
-                pdf.setTextColor(245, 158, 11);
-                pdf.text(document.getElementById('synkinesis-eye-smile').innerText, 115, startY + 32);
+                pdf.setTextColor(75, 85, 99);
+                pdf.text("Bell's Palsy & Facial Nerve Symmetry Quantitative Grading", 15, 26);
+                pdf.text(`Generated: ${timestamp}`, 15, 31);
+                pdf.text(`Affected Side: ${state.palsySide.toUpperCase()}`, 150, 31);
 
-                pdf.setTextColor(226, 232, 240);
-                pdf.text("Oral-Ocular Coupling:", 115, startY + 44);
-                pdf.setTextColor(16, 185, 129);
-                pdf.text(document.getElementById('synkinesis-mouth-blink').innerText, 115, startY + 50);
+                pdf.setDrawColor(209, 213, 219);
+                pdf.line(15, 35, 195, 35);
 
-                // Add Task Snapshots if captured
-                if (state.capturedSnapshots['rest']) {
-                    pdf.addImage(state.capturedSnapshots['rest'], 'PNG', 15, 215, 85, 48);
-                    pdf.setTextColor(148, 163, 184);
+                // Section 1: Clinical Score Overview Box
+                pdf.setFillColor(243, 244, 246); // light gray
+                pdf.rect(15, 40, 180, 28, 'F');
+                pdf.rect(15, 40, 180, 28, 'S');
+
+                pdf.setFontSize(10);
+                pdf.setTextColor(17, 24, 39);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text("House-Brackmann Grade:", 20, 50);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(`${state.calculatedResults.hbGrade}`, 70, 50);
+
+                pdf.setFont('helvetica', 'bold');
+                pdf.text("Sunnybrook Composite Score:", 20, 60);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(`${state.calculatedResults.sbScore} / 100`, 75, 60);
+
+                // Section 2: Symmetry Metric Table
+                pdf.setFontSize(11);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text("Quantitative Metric Breakdown", 15, 78);
+
+                // Table Header
+                pdf.setFillColor(229, 231, 235);
+                pdf.rect(15, 82, 180, 8, 'F');
+                pdf.setFontSize(9);
+                pdf.text("Metric Parameter", 20, 87);
+                pdf.text("Measured Value", 110, 87);
+                pdf.text("Reference Target", 150, 87);
+
+                // Row 1
+                pdf.setFont('helvetica', 'normal');
+                pdf.text("Resting Facial Symmetry Gap", 20, 96);
+                pdf.text(`${state.calculatedResults.restGap}%`, 110, 96);
+                pdf.text("< 5.0%", 150, 96);
+                pdf.line(15, 99, 195, 99);
+
+                // Row 2
+                pdf.text("Voluntary Smile Excursion Ratio", 20, 105);
+                pdf.text(`${state.calculatedResults.smileExcursion}%`, 110, 105);
+                pdf.text("> 90.0%", 150, 105);
+                pdf.line(15, 108, 195, 108);
+
+                // Row 3
+                pdf.text("Eye Closure Completeness", 20, 114);
+                pdf.text(`${state.calculatedResults.eyeClosure}%`, 110, 114);
+                pdf.text("100.0%", 150, 114);
+                pdf.line(15, 117, 195, 117);
+
+                // Section 3: Captured Poses Images
+                pdf.setFontSize(11);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text("Captured Expression Snapshots", 15, 128);
+
+                const thumbPositions = [15, 60, 105, 150];
+                const labels = ["1. Rest", "2. Smile", "3. Eye Squeeze", "4. Brow Raise"];
+
+                for (let i = 1; i <= 4; i++) {
+                    const x = thumbPositions[i - 1];
                     pdf.setFontSize(8);
-                    pdf.text("Captured Baseline (Rest)", 15, 267);
-                }
-                if (state.capturedSnapshots['smile']) {
-                    pdf.addImage(state.capturedSnapshots['smile'], 'PNG', 110, 215, 85, 48);
-                    pdf.setTextColor(148, 163, 184);
-                    pdf.setFontSize(8);
-                    pdf.text("Captured Activation (Smile)", 110, 267);
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.text(labels[i - 1], x, 134);
+
+                    if (state.stepSnapshots[i]) {
+                        pdf.addImage(state.stepSnapshots[i], 'JPEG', x, 136, 40, 40);
+                    } else {
+                        pdf.rect(x, 136, 40, 40);
+                    }
                 }
 
                 // Footer Disclaimer
                 pdf.setFontSize(7);
                 pdf.setTextColor(100, 116, 139);
-                pdf.text("FaceQuant AI is an assistive research and tracking interface. Not an automated medical diagnosis tool.", 15, 285);
+                pdf.text("FaceTrack AI is an assistive research and tracking interface. Not an automated medical diagnosis tool.", 15, 285);
 
-                pdf.save(`FaceQuant_Clinical_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+                pdf.save(`FaceTrack_Clinical_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
             } catch (err) {
                 console.error("PDF Export Error: ", err);
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
             }
-        }
-
-        function switchTaskStep(stepIdx) {
-            state.currentStep = stepIdx;
-            const task = state.tasks[stepIdx];
-
-            // Update Header Information
-            document.getElementById('step-number').innerText = stepIdx + 1;
-            document.getElementById('task-title').innerText = task.title;
-            document.getElementById('task-instruction').innerText = task.instruction;
-
-            // Progress Bar
-            const pct = ((stepIdx + 1) / state.tasks.length) * 100;
-            document.getElementById('protocol-progress-bar').style.width = `${pct}%`;
-
-            // Active State on Nav Buttons
-            document.querySelectorAll('.step-nav-btn').forEach((btn, idx) => {
-                if (idx === stepIdx) {
-                    btn.className = 'step-nav-btn active px-2 py-2 rounded-lg text-xs font-medium bg-teal-500/20 text-teal-300 border border-teal-500/50 flex flex-col items-center gap-1 transition';
-                } else {
-                    btn.className = 'step-nav-btn px-2 py-2 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 flex flex-col items-center gap-1 transition hover:bg-slate-750';
-                }
-            });
-        }
-
-        function captureCurrentStep() {
-            const dataUrl = canvasElement.toDataURL('image/png');
-            const stepId = state.tasks[state.currentStep].id;
-            state.capturedSnapshots[stepId] = dataUrl;
-
-            // Render Preview Snapshots if applicable
-            if (stepId === 'rest') {
-                const img = document.getElementById('snapshot-rest');
-                img.src = dataUrl;
-                img.classList.remove('hidden');
-                document.getElementById('snapshot-rest-placeholder').classList.add('hidden');
-            } else if (stepId === 'smile') {
-                const img = document.getElementById('snapshot-smile');
-                img.src = dataUrl;
-                img.classList.remove('hidden');
-                document.getElementById('snapshot-smile-placeholder').classList.add('hidden');
-            }
-
-            // Move to next step if not last
-            if (state.currentStep < state.tasks.length - 1) {
-                switchTaskStep(state.currentStep + 1);
-            }
-        }
-
-        // Export JSON Clinical Assessment File
-        function exportClinicalReport() {
-            const reportData = {
-                timestamp: new Date().toISOString(),
-                patientSideAffected: state.palsySide,
-                houseBrackmannScore: document.getElementById('hb-grade-badge').innerText,
-                sunnybrookScore: document.getElementById('sunnybrook-score-display').innerText.trim(),
-                asymmetryMetrics: state.metrics,
-                completedTasks: Object.keys(state.capturedSnapshots)
-            };
-
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(reportData, null, 2));
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", `Bells_Palsy_Assessment_${new Date().toISOString().slice(0,10)}.json`);
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
         }
     </script>
 </body>
