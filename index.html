@@ -8,8 +8,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- MediaPipe Vision Tasks -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.js" crossorigin="anonymous"></script>
+    <!-- MediaPipe Face Mesh Classic & Camera Utils fallback -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <!-- jsPDF for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
@@ -264,14 +265,11 @@
     <!-- Application Script -->
     <script>
         // Global State & Configuration
-        const { FaceLandmarker, FilesetResolver } = vision;
-
-        let faceLandmarker = null;
+        let faceMesh = null;
         let webcam = null;
         let canvasElement = null;
         let canvasCtx = null;
         let showLandmarks = true;
-        let lastVideoTime = -1;
         let lastFrameTime = performance.now();
         let frameCount = 0;
 
@@ -317,28 +315,40 @@
             setupUIEventListeners();
             
             try {
-                await initializeMediaPipe();
+                await initializeFaceMesh();
                 await startWebcam();
             } catch (err) {
                 console.error("Initialization sequence error:", err);
             }
         });
 
-        // Initialize MediaPipe FaceLandmarker
-        async function initializeMediaPipe() {
+        // Initialize Reliable FaceMesh Engine
+        async function initializeFaceMesh() {
             try {
-                const filesetResolver = await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-                );
-                faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                    baseOptions: {
-                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-                        delegate: "GPU"
-                    },
-                    outputFaceBlendshapes: true,
-                    runningMode: "VIDEO",
-                    numFaces: 1
+                if (typeof FaceMesh === 'undefined') {
+                    let retries = 0;
+                    while (typeof FaceMesh === 'undefined' && retries < 30) {
+                        await new Promise(r => setTimeout(r, 100));
+                        retries++;
+                    }
+                }
+
+                if (typeof FaceMesh === 'undefined') {
+                    throw new Error("MediaPipe FaceMesh library failed to load.");
+                }
+
+                faceMesh = new FaceMesh({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
                 });
+
+                faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                faceMesh.onResults(onFaceMeshResults);
 
                 document.getElementById('cameraStatus').innerHTML = 
                     `<span class="w-2 h-2 rounded-full bg-teal-400"></span> Camera Ready`;
@@ -349,7 +359,7 @@
             }
         }
 
-        // Setup Webcam Stream
+        // Setup Webcam Stream with Camera Utils
         async function startWebcam() {
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -372,7 +382,22 @@
                         webcam.play();
                         canvasElement.width = webcam.videoWidth || 640;
                         canvasElement.height = webcam.videoHeight || 480;
-                        requestAnimationFrame(renderLoop);
+                        
+                        // Process frames continuously
+                        if (typeof Camera !== 'undefined') {
+                            const camera = new Camera(webcam, {
+                                onFrame: async () => {
+                                    if (faceMesh) {
+                                        await faceMesh.send({ image: webcam });
+                                    }
+                                },
+                                width: 640,
+                                height: 480
+                            });
+                            camera.start();
+                        } else {
+                            requestAnimationFrame(fallbackRenderLoop);
+                        }
                         resolve();
                     };
                 });
@@ -383,14 +408,16 @@
             }
         }
 
-        // Main Video Processing Loop
-        async function renderLoop() {
-            if (!webcam || webcam.paused || webcam.ended) {
-                requestAnimationFrame(renderLoop);
-                return;
+        async function fallbackRenderLoop() {
+            if (webcam && !webcam.paused && !webcam.ended && faceMesh) {
+                await faceMesh.send({ image: webcam });
             }
+            requestAnimationFrame(fallbackRenderLoop);
+        }
 
-            // Resize canvas dynamically if dimension changes
+        // Process Facial Landmarks Results
+        function onFaceMeshResults(results) {
+            // Resize canvas dynamically if needed
             if (webcam.videoWidth && canvasElement.width !== webcam.videoWidth) {
                 canvasElement.width = webcam.videoWidth;
                 canvasElement.height = webcam.videoHeight;
@@ -405,36 +432,27 @@
                 lastFrameTime = now;
             }
 
-            // Process face landmarks
-            if (faceLandmarker && webcam.currentTime !== lastVideoTime) {
-                lastVideoTime = webcam.currentTime;
-                const startTimeMs = performance.now();
-                const results = faceLandmarker.detectForVideo(webcam, startTimeMs);
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // Draw mirrored camera frame
+            canvasCtx.translate(canvasElement.width, 0);
+            canvasCtx.scale(-1, 1);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-                canvasCtx.save();
-                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-                
-                // Draw mirrored camera frame
-                canvasCtx.translate(canvasElement.width, 0);
-                canvasCtx.scale(-1, 1);
-                canvasCtx.drawImage(webcam, 0, 0, canvasElement.width, canvasElement.height);
-
-                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    const landmarks = results.faceLandmarks[0];
-                    if (showLandmarks) {
-                        drawFaceMesh(landmarks);
-                    }
-                    // Cache current frame landmarks
-                    window.currentLandmarks = landmarks;
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                if (showLandmarks) {
+                    drawFaceMesh(landmarks);
                 }
-
-                canvasCtx.restore();
+                // Cache current frame landmarks
+                window.currentLandmarks = landmarks;
             }
 
-            requestAnimationFrame(renderLoop);
+            canvasCtx.restore();
         }
 
-        // Draw MediaPipe Landmark Points & Key Symmetry Vectors
+        // Draw Landmark Points & Key Symmetry Vectors
         function drawFaceMesh(landmarks) {
             const w = canvasElement.width;
             const h = canvasElement.height;
