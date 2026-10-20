@@ -33,6 +33,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for radar & visual metrics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- html2canvas and jsPDF for Clinical PDF Report Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- MediaPipe Face Mesh & Camera Utils -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
@@ -268,7 +271,7 @@
         <section class="lg:col-span-5 flex flex-col gap-6">
 
             <!-- House-Brackmann & Sunnybrook Grading Cards -->
-            <div class="glass-card rounded-2xl p-5 flex flex-col gap-5 border-l-4 border-l-teal-500">
+            <div id="clinical-summary-card" class="glass-card rounded-2xl p-5 flex flex-col gap-5 border-l-4 border-l-teal-500">
                 <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                     <div>
                         <h3 class="font-bold text-base text-white">Clinical Assessment Scores</h3>
@@ -351,9 +354,12 @@
                 </div>
 
                 <!-- Export & Clinical Download Action -->
-                <div class="pt-2 border-t border-slate-800 flex gap-2">
-                    <button id="download-report-btn" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-teal-400 border border-teal-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-file-arrow-down"></i> Export Clinical Report (JSON)
+                <div class="pt-2 border-t border-slate-800 flex flex-wrap sm:flex-nowrap gap-2">
+                    <button id="download-pdf-report-btn" class="flex-1 py-2.5 px-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-teal-900/40 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-file-pdf text-sm"></i> Export PDF Report
+                    </button>
+                    <button id="download-report-btn" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-teal-400 border border-teal-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-code"></i> JSON
                     </button>
                     <button id="reset-protocol-btn" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl text-xs font-semibold transition">
                         <i class="fa-solid fa-rotate-right"></i>
@@ -822,7 +828,10 @@
                 }
             });
 
-            // Export Clinical Report
+            // Export PDF Clinical Report
+            document.getElementById('download-pdf-report-btn').addEventListener('click', exportPDFReport);
+
+            // Export JSON Clinical Report
             document.getElementById('download-report-btn').addEventListener('click', exportClinicalReport);
 
             // Reset Protocol
@@ -834,6 +843,151 @@
                 document.getElementById('snapshot-smile').classList.add('hidden');
                 document.getElementById('snapshot-smile-placeholder').classList.remove('hidden');
             });
+        }
+
+        // Export PDF Clinical Assessment File using jsPDF & Canvas
+        async function exportPDFReport() {
+            const btn = document.getElementById('download-pdf-report-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> Generating PDF...`;
+            btn.disabled = true;
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const timestamp = new Date().toLocaleString();
+
+                // Header & Title
+                pdf.setFillColor(15, 23, 42); // slate-900
+                pdf.rect(0, 0, 210, 297, 'F');
+
+                pdf.setTextColor(20, 184, 166); // teal-500
+                pdf.setFontSize(20);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text("FaceQuant Clinical AI Assessment", 15, 20);
+
+                pdf.setTextColor(148, 163, 184); // slate-400
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text("Bell's Palsy & Facial Nerve Symmetry Evaluation Report", 15, 26);
+                pdf.text(`Generated: ${timestamp}`, 15, 32);
+                pdf.text(`Affected Side: ${state.palsySide.toUpperCase()}`, 140, 32);
+
+                pdf.setDrawColor(30, 41, 59);
+                pdf.line(15, 36, 195, 36);
+
+                // Clinical Scores Section
+                const hbText = document.getElementById('hb-grade-badge').innerText;
+                const hbScore = document.getElementById('hb-score-display').innerText.replace(/\s+/g, ' ');
+                const sunnybrookScore = document.getElementById('sunnybrook-score-display').innerText.replace(/\s+/g, ' ');
+
+                pdf.setFillColor(30, 41, 59);
+                pdf.roundedRect(15, 42, 85, 35, 3, 3, 'F');
+                pdf.roundedRect(110, 42, 85, 35, 3, 3, 'F');
+
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(11);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text("House-Brackmann Scale", 20, 50);
+                pdf.text("Sunnybrook Composite Score", 115, 50);
+
+                pdf.setTextColor(20, 184, 166);
+                pdf.setFontSize(18);
+                pdf.text(hbText, 20, 62);
+
+                pdf.setTextColor(16, 185, 129);
+                pdf.text(sunnybrookScore, 115, 62);
+
+                pdf.setFontSize(9);
+                pdf.setTextColor(148, 163, 184);
+                pdf.text(document.getElementById('hb-desc').innerText, 20, 71);
+                pdf.text("Facial Symmetry Index (0 - 100)", 115, 71);
+
+                // Quantitative Disparity Section
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(12);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text("Real-time Muscle Activation Disparity Metrics", 15, 88);
+
+                const m = state.metrics;
+                const metricsTable = [
+                    ["Domain / Muscle", "Left (px)", "Right (px)", "Disparity Difference (%)"],
+                    ["Frontalis (Eyebrow Height)", `${m.eyebrowHeightL}px`, `${m.eyebrowHeightR}px`, `${document.getElementById('metric-eyebrow-val').innerText}`],
+                    ["Orbicularis Oculi (Eye Aperture)", `${m.eyeApertureL}px`, `${m.eyeApertureR}px`, `${document.getElementById('metric-eye-val').innerText}`],
+                    ["Zygomaticus Major (Smile Excursion)", `${m.smileExcursionL}px`, `${m.smileExcursionR}px`, `${document.getElementById('metric-smile-val').innerText}`],
+                    ["Orbicularis Oris (Lip & Midface)", `${m.nasolabialL}px`, `${m.nasolabialR}px`, `${document.getElementById('metric-mouth-val').innerText}`]
+                ];
+
+                let startY = 94;
+                metricsTable.forEach((row, idx) => {
+                    pdf.setFillColor(idx === 0 ? 13 : 30, idx === 0 ? 148 : 41, idx === 0 ? 136 : 59);
+                    pdf.rect(15, startY, 180, 8, 'F');
+
+                    pdf.setTextColor(idx === 0 ? 255 : 226, idx === 0 ? 255 : 232, idx === 0 ? 255 : 240);
+                    pdf.setFontSize(9);
+                    pdf.setFont('helvetica', idx === 0 ? 'bold' : 'normal');
+
+                    pdf.text(row[0], 18, startY + 5.5);
+                    pdf.text(row[1], 85, startY + 5.5);
+                    pdf.text(row[2], 120, startY + 5.5);
+                    pdf.text(row[3], 155, startY + 5.5);
+
+                    startY += 9;
+                });
+
+                // Render Chart Canvas snapshot into PDF
+                const chartCanvas = document.getElementById('symmetry-radar-chart');
+                if (chartCanvas) {
+                    const chartImg = chartCanvas.toDataURL('image/png');
+                    pdf.addImage(chartImg, 'PNG', 15, startY + 5, 85, 65);
+                }
+
+                // Synkinesis Summary Box
+                pdf.setFillColor(30, 41, 59);
+                pdf.roundedRect(110, startY + 5, 85, 65, 3, 3, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(11);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text("Synkinesis & Co-contraction Analysis", 115, startY + 14);
+
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setTextColor(226, 232, 240);
+                pdf.text("Ocular-Oral Coupling:", 115, startY + 26);
+                pdf.setTextColor(245, 158, 11);
+                pdf.text(document.getElementById('synkinesis-eye-smile').innerText, 115, startY + 32);
+
+                pdf.setTextColor(226, 232, 240);
+                pdf.text("Oral-Ocular Coupling:", 115, startY + 44);
+                pdf.setTextColor(16, 185, 129);
+                pdf.text(document.getElementById('synkinesis-mouth-blink').innerText, 115, startY + 50);
+
+                // Add Task Snapshots if captured
+                if (state.capturedSnapshots['rest']) {
+                    pdf.addImage(state.capturedSnapshots['rest'], 'PNG', 15, 215, 85, 48);
+                    pdf.setTextColor(148, 163, 184);
+                    pdf.setFontSize(8);
+                    pdf.text("Captured Baseline (Rest)", 15, 267);
+                }
+                if (state.capturedSnapshots['smile']) {
+                    pdf.addImage(state.capturedSnapshots['smile'], 'PNG', 110, 215, 85, 48);
+                    pdf.setTextColor(148, 163, 184);
+                    pdf.setFontSize(8);
+                    pdf.text("Captured Activation (Smile)", 110, 267);
+                }
+
+                // Footer Disclaimer
+                pdf.setFontSize(7);
+                pdf.setTextColor(100, 116, 139);
+                pdf.text("FaceQuant AI is an assistive research and tracking interface. Not an automated medical diagnosis tool.", 15, 285);
+
+                pdf.save(`FaceQuant_Clinical_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+            } catch (err) {
+                console.error("PDF Export Error: ", err);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         }
 
         function switchTaskStep(stepIdx) {
